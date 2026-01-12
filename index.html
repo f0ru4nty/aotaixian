@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>鳌太线穿越模拟器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", sans-serif;
+        }
+
+        body {
+            background-color: #f5f5f5;
+            color: #333;
+            line-height: 1.6;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        /* 响应式适配 */
+        @media (max-width: 600px) {
+            .container {
+                padding: 15px;
+                margin: 10px;
+            }
+            button {
+                width: 100%;
+                margin-bottom: 10px !important;
+            }
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            font-size: 24px;
+        }
+
+        .game-status {
+            background-color: #e8f4fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            border-left: 5px solid #3498db;
+        }
+
+        .status-item {
+            font-size: 16px;
+            margin: 5px 0;
+        }
+
+        .status-item strong {
+            color: #2980b9;
+        }
+
+        .location-options {
+            margin: 20px 0;
+        }
+
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #2980b9;
+        }
+
+        button:disabled {
+            background-color: #bdc3c7;
+            cursor: not-allowed;
+        }
+
+        .camp-button {
+            background-color: #27ae60;
+        }
+
+        .camp-button:hover {
+            background-color: #219653;
+        }
+
+        .exit-button {
+            background-color: #e67e22;
+        }
+
+        .exit-button:hover {
+            background-color: #d35400;
+        }
+
+        .game-message {
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .failure {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .restart-btn {
+            display: block;
+            width: 200px;
+            margin: 20px auto;
+            background-color: #9b59b6;
+        }
+
+        .restart-btn:hover {
+            background-color: #8e44ad;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        /* 新增图片样式 */
+        .game-image {
+            margin-top: 30px;
+            text-align: center;
+        }
+
+        .game-image img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>鳌太线穿越模拟器</h1>
+
+        <div class="game-status" id="gameStatus">
+            <div class="status-item"><strong>当前位置：</strong> <span id="currentLocation">塘口村</span></div>
+            <div class="status-item"><strong>剩余物资：</strong> <span id="supplies">10</span> 点</div>
+            <div class="status-item"><strong>死亡概率：</strong> <span id="deathProbability">0</span>%</div>
+        </div>
+
+        <div class="location-options" id="locationOptions">
+            <!-- 路线选项会通过JS动态生成 -->
+        </div>
+
+        <div class="game-message hidden" id="gameMessage"></div>
+
+        <button class="restart-btn hidden" id="restartBtn" onclick="restartGame()">重新开始游戏</button>
+
+        <!-- 新增图片区域 -->
+        <div class="game-image">
+            <img src="atx.png" alt="鳌太线相关图片">
+        </div>
+    </div>
+
+    <!-- 音频元素 - 隐藏式，用于播放音效 -->
+    <audio id="deathSound" preload="auto">
+        <source src="death.mp3" type="audio/mpeg">
+        您的浏览器不支持音频播放
+    </audio>
+    <audio id="winSound" preload="auto">
+        <source src="win.mp3" type="audio/mpeg">
+        您的浏览器不支持音频播放
+    </audio>
+
+    <script>
+        // 游戏地图数据 - 定义所有地点和可前往的路线
+        const gameMap = {
+            "塘口村": ["2900营地", "盆景园"],
+            "2900营地": ["塘口村", "盆景园"],
+            "盆景园": ["塘口", "2900营地", "导航架"],
+            "导航架": ["盆景园", "西跑马梁", "23公里"],
+            "23公里": ["导航架", "西跑马梁"], // 撤离点
+            "西跑马梁": ["导航架",  "23公里", "药王庙"],
+            "药王庙": ["西跑马梁", "水窝子", "飞机梁"],
+            "水窝子": ["药王庙", "飞机梁"], // 营地
+            "飞机梁": ["水窝子", "2800营地", "金字塔垭口"],
+            "2800营地": ["飞机梁", "金字塔垭口"], // 营地
+            "金字塔垭口": ["2800营地", "西塬", "大太白梁"],
+            "西塬": ["金字塔垭口", "大太白梁"], // 营地
+            "大太白梁": ["西塬", "东塬"],
+            "东塬": ["大太白梁", "万仙阵"],
+            "万仙阵": ["东塬", "将军石", "跑马梁"],
+            "将军石": ["万仙阵", "老庙子"],
+            "老庙子": ["将军石", "太白庙"],
+            "太白庙": ["老庙子", "都督门"],
+            "都督门": ["太白庙"], // 撤离点
+            "跑马梁": ["万仙阵", "大爷海"],
+            "大爷海": ["跑马梁", "拔仙台", "文公庙"], // 营地
+            "拔仙台": ["大爷海", "三爷海"],
+            "三爷海": ["拔仙台", "药王殿"],
+            "药王殿": ["三爷海", "南天门"],
+            "南天门": ["药王殿", "铁甲树"],
+            "铁甲树": ["南天门", "厚畛子"],
+            "厚畛子": ["铁甲树"], // 撤离点
+            "文公庙": ["大爷海", "明星寺", "小文公庙"],
+            "小文公庙": ["文公庙", "下板寺索道"],
+            "下板寺索道": ["小文公庙", "汤峪"],
+            "汤峪": ["下板寺索道"], // 撤离点
+            "明星寺": ["文公庙", "平安寺"],
+            "平安寺": ["明星寺", "骆驼寺"],
+            "骆驼寺": ["平安寺", "上白云"],
+            "上白云": ["骆驼寺", "下白云"],
+            "下白云": ["上白云", "鹦鸽镇公路"],
+            "鹦鸽镇公路": ["下白云"] // 撤离点
+        };
+
+        // 营地列表（可补充物资）
+        const camps = [
+            "塘口村", "2900营地", "水窝子", "2800营地", "西塬", "大爷海"
+        ];
+
+        // 撤离点列表
+        const exitPoints = [
+            "23公里", "都督门", "厚畛子", "汤峪", "鹦鸽镇公路"
+        ];
+
+        // 游戏状态变量
+        let currentLocation = "塘口村";
+        let supplies = 10;
+        let gameOver = false;
+
+        // DOM元素
+        const currentLocationEl = document.getElementById("currentLocation");
+        const suppliesEl = document.getElementById("supplies");
+        const deathProbabilityEl = document.getElementById("deathProbability");
+        const locationOptionsEl = document.getElementById("locationOptions");
+        const gameMessageEl = document.getElementById("gameMessage");
+        const restartBtn = document.getElementById("restartBtn");
+        // 获取音频元素
+        const deathSoundEl = document.getElementById("deathSound");
+        const winSoundEl = document.getElementById("winSound");
+
+        // 初始化游戏
+        function initGame() {
+            currentLocation = "塘口村";
+            supplies = 10;
+            gameOver = false;
+
+            // 更新状态显示
+            updateGameStatus();
+            // 生成可选路线
+            generateLocationOptions();
+            // 隐藏游戏结果和重启按钮
+            gameMessageEl.classList.add("hidden");
+            restartBtn.classList.add("hidden");
+        }
+
+        // 更新游戏状态显示
+        function updateGameStatus() {
+            currentLocationEl.textContent = currentLocation;
+            suppliesEl.textContent = supplies;
+
+            // 计算死亡概率：(10 - 物资) * 10%
+            const deathProb = (10 - supplies) * 10;
+            deathProbabilityEl.textContent = deathProb;
+        }
+
+        // 生成当前位置的可选路线按钮
+        function generateLocationOptions() {
+            // 清空现有按钮
+            locationOptionsEl.innerHTML = "";
+
+            // 如果游戏结束，不生成按钮
+            if (gameOver) return;
+
+            // 获取当前位置的可前往地点
+            const destinations = gameMap[currentLocation];
+
+            // 为每个目的地创建按钮
+            destinations.forEach(destination => {
+                const button = document.createElement("button");
+                button.textContent = `前往 ${destination}`;
+
+                // 根据地点类型设置不同样式
+                if (camps.includes(destination)) {
+                    button.classList.add("camp-button");
+                }
+                if (exitPoints.includes(destination)) {
+                    button.classList.add("exit-button");
+                }
+
+                // 点击事件
+                button.addEventListener("click", () => {
+                    moveToDestination(destination);
+                });
+
+                locationOptionsEl.appendChild(button);
+            });
+
+            // 如果当前位置是营地，添加补充物资按钮
+            if (camps.includes(currentLocation) && supplies < 10) {
+                const supplyButton = document.createElement("button");
+                supplyButton.textContent = "补充物资（恢复至10点）";
+                supplyButton.classList.add("camp-button");
+                supplyButton.addEventListener("click", () => {
+                    supplies = 10;
+                    updateGameStatus();
+                    // 补充后移除补充按钮，避免重复补充
+                    supplyButton.disabled = true;
+                });
+                locationOptionsEl.appendChild(supplyButton);
+            }
+        }
+
+        // 移动到指定目的地
+        function moveToDestination(destination) {
+            // 消耗1点物资
+            supplies -= 1;
+
+            // 更新当前位置
+            currentLocation = destination;
+
+            // 更新游戏状态
+            updateGameStatus();
+
+            // 检查是否死亡
+            checkDeath();
+
+            // 如果游戏未结束，检查是否到达撤离点
+            if (!gameOver) {
+                checkExitPoint();
+            }
+
+            // 重新生成可选路线
+            generateLocationOptions();
+        }
+
+        // 播放死亡语音
+        function playDeathSound() {
+            try {
+                // 重置音频播放位置到开头
+                deathSoundEl.currentTime = 0;
+                // 播放音频
+                deathSoundEl.play().catch(error => {
+                    console.log("死亡音效播放失败：", error);
+                });
+            } catch (error) {
+                console.log("播放死亡语音时出错：", error);
+            }
+        }
+
+        // 播放胜利音效
+        function playWinSound() {
+            try {
+                // 重置音频播放位置到开头
+                winSoundEl.currentTime = 0;
+                // 播放音频
+                winSoundEl.play().catch(error => {
+                    console.log("胜利音效播放失败：", error);
+                });
+            } catch (error) {
+                console.log("播放胜利音效时出错：", error);
+            }
+        }
+
+        // 检查是否死亡
+        function checkDeath() {
+            // 计算死亡概率
+            const deathProb = (10 - supplies) * 10;
+
+            // 生成0-99的随机数，判断是否死亡
+            const randomNum = Math.floor(Math.random() * 100);
+
+            if (randomNum < deathProb) {
+                gameOver = true;
+                // 播放死亡语音
+                playDeathSound();
+                showGameMessage(`<p>很遗憾！你在前往【${currentLocation}】途中不幸遇难。</p>
+                                <p>死亡概率：${deathProb}% | 随机数：${randomNum}</p>`, "failure");
+            }
+        }
+
+        // 检查是否到达撤离点
+        function checkExitPoint() {
+            if (exitPoints.includes(currentLocation)) {
+                gameOver = true;
+                // 播放胜利音效
+                playWinSound();
+                showGameMessage(`<p>撤离成功！撤离点：【${currentLocation}】！</p>
+                                <p>剩余物资：${supplies}点</p>
+                                <p>穿越鳌太线任务完成！</p>`, "success");
+            }
+        }
+
+        // 显示游戏结果信息
+        function showGameMessage(message, type) {
+            gameMessageEl.innerHTML = message;
+            gameMessageEl.className = `game-message ${type}`;
+            gameMessageEl.classList.remove("hidden");
+
+            // 显示重新开始按钮
+            restartBtn.classList.remove("hidden");
+        }
+
+        // 重新开始游戏
+        function restartGame() {
+            initGame();
+        }
+
+        // 页面加载时初始化游戏
+        window.onload = initGame;
+    </script>
+</body>
+</html>
